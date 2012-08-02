@@ -162,12 +162,13 @@ getEthernetFrame = do
          then do mArpPacket <- getARPPacket
                  case mArpPacket of
                    Just arpPacket -> return $ hCons hdr (hCons (ARPInEthernet arpPacket) hNil)
-                   Nothing -> error "unknown ethernet frame"
---                     do body <- Strict.getByteString r
---                        return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
-         else error "unknown ethernet frame" 
-              --do body <- Strict.getByteString r
-              --   return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
+                   Nothing ->
+                     do r <- Strict.remaining
+                        body <- Strict.getByteString r
+                        return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
+         else do r <- Strict.remaining
+                 body <- Strict.getByteString r
+                 return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
 {-# INLINE getEthernetFrame #-}
 
 getEthernetFrame2 :: Int -> Binary.Get EthernetFrame
