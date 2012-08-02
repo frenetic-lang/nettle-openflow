@@ -1092,7 +1092,8 @@ putCSMessage (xid, msg) =
           M.CSEchoReply  bytes   -> do putH ofptEchoReply (headerSize + length bytes)  
                                        putWord8s bytes
           M.FeaturesRequest -> putH ofptFeaturesRequest headerSize
-          M.PortMod portModRecord -> do putH ofptPortMod portModLength
+          M.PortMod portModRecord -> do putH ofptPortMod 
+                                             (fromIntegral portModLength)
                                         putPortMod portModRecord
           M.BarrierRequest         -> do putH ofptBarrierRequest headerSize
           M.StatsRequest request -> do putH ofptStatsRequest (statsRequestSize request)
@@ -1100,6 +1101,7 @@ putCSMessage (xid, msg) =
           M.GetQueueConfig request -> do putH ofptQueueGetConfigRequest 12
                                          putQueueConfigRequest request
     where vid      = ofpVersion
+          putH :: Integral a => MessageTypeCode -> a -> Put
           putH tcode len = putHeader (OFPHeader vid tcode (fromIntegral len) xid) 
 {-# INLINE putCSMessage #-}
 
