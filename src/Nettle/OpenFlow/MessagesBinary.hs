@@ -1092,8 +1092,7 @@ putCSMessage (xid, msg) =
           M.CSEchoReply  bytes   -> do putH ofptEchoReply (headerSize + length bytes)  
                                        putWord8s bytes
           M.FeaturesRequest -> putH ofptFeaturesRequest headerSize
-          M.PortMod portModRecord -> do putH ofptPortMod 
-                                             (fromIntegral portModLength)
+          M.PortMod portModRecord -> do putH ofptPortMod portModLength
                                         putPortMod portModRecord
           M.BarrierRequest         -> do putH ofptBarrierRequest headerSize
           M.StatsRequest request -> do putH ofptStatsRequest (statsRequestSize request)
@@ -1832,7 +1831,8 @@ ofpMatch2Match ofpm = Match
                       (IPAddress (ofpm_nw_dst ofpm) // dst_prefix_len)
                       (getField 6 ofpm_tp_src)
                       (getField 7 ofpm_tp_dst)
-    where getField wcindex getter = if testBit (ofpm_wildcards ofpm) wcindex
+    where getField :: Int -> (OFPMatch -> a) -> Maybe a
+          getField wcindex getter = if testBit (ofpm_wildcards ofpm) wcindex
                                     then Nothing
                                     else Just (getter ofpm)
           nw_src_shift       = 8
