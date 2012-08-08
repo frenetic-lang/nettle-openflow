@@ -45,7 +45,7 @@ import qualified Data.ByteString.Internal as S
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.Printf
-
+import System.Log.Logger
 
 type ServerPortNumber = Word16
 deriving instance Ord SockAddr
@@ -116,7 +116,7 @@ acceptSwitch ofps@(OpenFlowServer (s,shmr)) =
                               do sendToSwitch switch (xid, CSEchoReply bytes) 
                                  go2'
                             _ -> 
-                              do putStrLn ("ignoring non feature message while waiting for features: " ++ show (xid, msg))
+                              do debugM "nettle" ("ignoring non feature message while waiting for features: " ++ show (xid, msg))
                                  go2'
     
      

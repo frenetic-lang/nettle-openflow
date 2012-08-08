@@ -63,5 +63,6 @@ Library
     , HList
     , syb 
     , array
+    , hslogger
 
 
