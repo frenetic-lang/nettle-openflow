@@ -18,9 +18,10 @@ import Nettle.Ethernet.AddressResolutionProtocol
 import Nettle.IPv4.IPAddress
 import qualified Nettle.IPv4.IPPacket as IP
 import Nettle.OpenFlow.Port
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes)
 import Control.Monad.Error
 import Data.HList 
+import Data.List (intersperse)
 import qualified Data.Binary.Strict.Get as Strict
 
 -- | Each flow entry includes a match, which essentially defines packet-matching condition. 
@@ -34,7 +35,51 @@ data Match = Match { inPort                             :: !(Maybe PortID),
                      matchIPProtocol                    :: !(Maybe IP.IPProtocol), 
                      srcIPAddress, dstIPAddress         :: !IPAddressPrefix,
                      srcTransportPort, dstTransportPort :: !(Maybe IP.TransportPort) }
-             deriving (Show,Read,Eq)
+             deriving (Read,Eq)
+
+instance Show Match where
+  show = showMatch
+
+showMatch Match {..} = "Match {" ++ list ++ "}" where
+  list = concat . intersperse ", " . catMaybes $ fields
+  fields = [ case inPort of
+               Nothing -> Nothing
+               Just v -> Just $ "inPort = \"" ++ show v ++ "\""
+           , case srcEthAddress of
+               Nothing -> Nothing
+               Just v -> Just $ "srcEthAddress = \"" ++ show v ++ "\""
+           , case dstEthAddress of
+               Nothing -> Nothing
+               Just v -> Just $ "dstEthAddress = \"" ++ show v ++ "\""
+           , case vLANID of
+               Nothing -> Nothing
+               Just v -> Just $ "vLANID = \"" ++ show v ++ "\""
+           , case vLANPriority of
+               Nothing -> Nothing
+               Just v -> Just $ "vLANPriority = \"" ++ show v ++ "\""
+           , case ethFrameType of
+               Nothing -> Nothing
+               Just v -> Just $ "ethFrameType = \"" ++ show v ++ "\""
+           , case ipTypeOfService of
+               Nothing -> Nothing
+               Just v -> Just $ "ipTypeOfService = \"" ++ show v ++ "\""
+           , case matchIPProtocol of
+               Nothing -> Nothing
+               Just v -> Just $ "matchIPProtocol = \"" ++ show v ++ "\""
+           , case srcIPAddress of
+               v@(_, len) -> if len == 0 then Nothing
+                             else Just $ "srcIPAddress = \"" ++ show v ++ "\""
+           , case dstIPAddress of
+               v@(_, len) -> if len == 0 then Nothing
+                             else Just $ "dstIPAddress = \"" ++ show v ++ "\""
+           , case srcTransportPort of
+               Nothing -> Nothing
+               Just v -> Just $ "srcTransportPort = \"" ++ show v ++ "\""
+           , case dstTransportPort of
+               Nothing -> Nothing
+               Just v -> Just $ "dstTransportPort = \"" ++ show v ++ "\""
+           ]
+
 
 
 -- |A match that matches every packet.
