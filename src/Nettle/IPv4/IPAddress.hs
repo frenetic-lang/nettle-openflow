@@ -43,9 +43,6 @@ getIPAddress :: Get IPAddress
 getIPAddress = getWord32be >>= return . IPAddress
 {-# INLINE getIPAddress #-}
 
-getIPAddress2 :: Binary.Get IPAddress
-getIPAddress2 = Binary.getWord32be >>= return . IPAddress
-
 putIPAddress :: IPAddress -> Strict.Put
 putIPAddress (IPAddress a) = Strict.putWord32be a
 

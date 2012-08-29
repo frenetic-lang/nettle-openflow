@@ -26,8 +26,6 @@ module Nettle.Ethernet.EthernetFrame (
     -- * Parsers and unparsers 
   , getEthernetFrame
   , getEthHeader
-  , getEthernetFrame2
-  , getEthHeader2
   , putEthHeader
   , putEthFrame
     
@@ -170,42 +168,6 @@ getEthernetFrame = do
                  body <- Strict.getByteString r
                  return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
 {-# INLINE getEthernetFrame #-}
-
-getEthernetFrame2 :: Int -> Binary.Get EthernetFrame
-getEthernetFrame2 total = do 
-  hdr <- getEthHeader2
-  soFar <- Binary.bytesRead 
-  let r = total - fromIntegral soFar 
-  if typeCode hdr == ethTypeIP
-    then do ipPacket <- getIPPacket2
-            return $ hCons hdr (hCons (IPInEthernet ipPacket) hNil)            
-    else if typeCode hdr == ethTypeARP
-         then do mArpPacket <- getARPPacket2
-                 case mArpPacket of
-                   Just arpPacket -> return $ hCons hdr (hCons (ARPInEthernet arpPacket) hNil)
-                   Nothing -> 
-                     do body <- Binary.getByteString r
-                        return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
-         else do body <- Binary.getByteString r
-                 return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
-
-
--- | Parser for Ethernet headers.
-getEthHeader2 :: Binary.Get EthernetHeader
-getEthHeader2 = do 
-  dstAddr <- getEthernetAddress2
-  srcAddr <- getEthernetAddress2
-  tcode   <- Binary.getWord16be
-  if tcode < typeEth2Cutoff 
-    then error "don't know how to parse this kind of ethernet frame"
-    else if (tcode == ethTypeVLAN) 
-         then do x <- Binary.getWord16be
-                 etherType <- Binary.getWord16be
-                 let pcp = fromIntegral (shiftR x 13)
-                 let cfi = testBit x 12
-                 let vid = clearBits x [12,13,14,15]
-                 return (Ethernet8021Q dstAddr srcAddr etherType pcp cfi vid)
-         else return (EthernetHeader dstAddr srcAddr tcode)
 
 getEthHeader :: Strict.Get EthernetHeader
 getEthHeader = do 

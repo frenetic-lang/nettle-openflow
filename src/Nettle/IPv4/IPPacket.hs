@@ -44,7 +44,6 @@ module Nettle.IPv4.IPPacket (
     
     -- * Parsers
   , getIPPacket
-  , getIPPacket2
   , getIPHeader
   , ICMPHeader
   , ICMPType
@@ -147,26 +146,6 @@ getIPHeader = do
                    } )
 {-# INLINE getIPHeader #-}
 
-getIPHeader2 :: Binary.Get IPHeader
-getIPHeader2 = do 
-  b1                 <- Binary.getWord8
-  diffServ           <- Binary.getWord8
-  totalLen           <- Binary.getWord16be
-  ident              <- Binary.getWord16be
-  flagsAndFragOffset <- Binary.getWord16be
-  ttl                <- Binary.getWord8
-  nwproto            <- getIPProtocol2
-  hdrChecksum        <- Binary.getWord16be
-  nwsrc              <- getIPAddress2
-  nwdst              <- getIPAddress2
-  return (IPHeader { ipSrcAddress = nwsrc 
-                   , ipDstAddress = nwdst 
-                   , ipProtocol = nwproto
-                   , headerLength = fromIntegral (b1 .&. 0x0f)
-                   , totalLength  = fromIntegral totalLen
-                   , dscp = shiftR diffServ 2
-                   } )
-
 
 getIPProtocol :: Get IPProtocol 
 getIPProtocol = getWord8
@@ -193,19 +172,6 @@ getIPPacket = do
                                              return . (\bs -> hCons hdr (hCons (UninterpretedIPBody (B.fromChunks [bs])) hNil))
 {-# INLINE getIPPacket #-}
           
-getIPPacket2 :: Binary.Get IPPacket 
-getIPPacket2 = do 
-  hdr  <- getIPHeader2
-  body <- getIPBody hdr
-  return body
-    where getIPBody hdr@(IPHeader {..}) 
-              | ipProtocol == ipTypeTcp  = getTCPHeader2  >>= return . (\tcpHdr -> hCons hdr (hCons (TCPInIP tcpHdr) hNil))
-              | ipProtocol == ipTypeUdp  = do udpHdr <- getUDPHeader2  
-                                              body <- Binary.getByteString (fromIntegral (totalLength - (4 * headerLength)))
-                                              return (hCons hdr (hCons (UDPInIP udpHdr body) hNil))
-              | ipProtocol == ipTypeIcmp = getICMPHeader2 >>= return . (\icmpHdr -> hCons hdr (hCons (ICMPInIP icmpHdr) hNil))
-              | otherwise                = Binary.getByteString (fromIntegral (totalLength - (4 * headerLength))) >>= 
-                                           return . (\bs -> hCons hdr (hCons (UninterpretedIPBody (B.fromChunks [bs])) hNil))
 
 -- Transport Header
 

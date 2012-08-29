@@ -5,7 +5,6 @@ module Nettle.Ethernet.AddressResolutionProtocol (
   , ARPQueryPacket(..)
   , ARPReplyPacket(..)
   , getARPPacket
-  , getARPPacket2
   , putARPPacket
   ) where
 
@@ -77,37 +76,6 @@ getARPPacket = do
                else return Nothing
   return body
 
--- | Parser for ARP packets
-getARPPacket2 :: Binary.Get (Maybe ARPPacket)
-getARPPacket2 = do 
-  htype <- Binary.getWord16be
-  ptype <- Binary.getWord16be
-  hlen  <- Binary.getWord8
-  plen  <- Binary.getWord8
-  opCode <- Binary.getWord16be
-  sha <- getEthernetAddress2
-  spa <- getIPAddress2
-  tha <- getEthernetAddress2
-  tpa <- getIPAddress2
-  body <- if opCode == queryOpCode
-          then return ( Just (ARPQuery (ARPQueryPacket { querySenderEthernetAddress = sha
-                                                       , querySenderIPAddress       = spa
-                                                       , queryTargetIPAddress       = tpa
-                                                       } 
-                                       )
-                             )
-                      )
-          else if opCode == replyOpCode 
-               then return (Just (ARPReply (ARPReplyPacket { replySenderEthernetAddress = sha
-                                                           , replySenderIPAddress       = spa
-                                                           , replyTargetEthernetAddress = tha
-                                                           , replyTargetIPAddress       = tpa
-                                                           } 
-                                           )
-                                 )
-                           )
-               else return Nothing
-  return body
 
 
 putARPPacket :: ARPPacket -> Strict.Put
