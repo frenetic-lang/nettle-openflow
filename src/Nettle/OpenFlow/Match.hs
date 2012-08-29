@@ -67,10 +67,11 @@ showMatch Match {..} = "Match {" ++ list ++ "}" where
                Nothing -> Nothing
                Just v -> Just $ "matchIPProtocol = \"" ++ show v ++ "\""
            , case srcIPAddress of
-               v@(_, len) -> if len == 0 then Nothing
+               v@(IPAddressPrefix _ len) -> 
+                 if len == 0 then Nothing
                              else Just $ "srcIPAddress = \"" ++ show v ++ "\""
            , case dstIPAddress of
-               v@(_, len) -> if len == 0 then Nothing
+               v@(IPAddressPrefix _ len) -> if len == 0 then Nothing
                              else Just $ "dstIPAddress = \"" ++ show v ++ "\""
            , case srcTransportPort of
                Nothing -> Nothing

@@ -12,19 +12,30 @@ import qualified Nettle.OpenFlow.StrictPut as Strict
 import qualified Data.Binary.Get as Binary
 import Text.Printf
 
-newtype IPAddress    = IPAddress Word32 deriving (Read, Eq, Ord)
-type IPAddressPrefix = (IPAddress, PrefixLength)
+newtype IPAddress = IPAddress { ipAddressToWord32 :: Word32 }
+  deriving (Read, Eq, Ord)
+
 type PrefixLength    = Word8
+
+data IPAddressPrefix 
+  = IPAddressPrefix IPAddress PrefixLength
+  deriving (Eq, Ord, Read)
+                     
 
 instance Show IPAddress where
   show addr = printf "%03d.%03d.%03d.%03d" b3 b2 b1 b0
     where (b3, b2, b1, b0) = addressToOctets addr
 
-
-
-ipAddressToWord32 :: IPAddress -> Word32
-ipAddressToWord32 (IPAddress a) = a
-{-# INLINE ipAddressToWord32 #-}
+instance Show IPAddressPrefix where
+  show (IPAddressPrefix addr pf) =
+    if pf == 32 then
+      show addr
+    else if pf >= 24 then
+      take 11 (show addr) ++ "/" ++ show pf
+    else if pf >= 16 then
+      take 7 (show addr) ++ "/" ++ show pf
+    else
+      take 3 (show addr) ++ "/" ++ show pf
 
 ipAddress :: Word8 -> Word8 -> Word8 -> Word8 -> IPAddress
 ipAddress b1 b2 b3 b4 = 
@@ -41,23 +52,23 @@ putIPAddress :: IPAddress -> Strict.Put
 putIPAddress (IPAddress a) = Strict.putWord32be a
 
 (//) :: IPAddress -> PrefixLength -> IPAddressPrefix
-(IPAddress a) // len = (IPAddress a', len)
+(IPAddress a) // len = IPAddressPrefix (IPAddress a') len
     where !a'   = a .&. mask
           !mask = complement (2^(32 - fromIntegral len) - 1)
 
 addressPart :: IPAddressPrefix -> IPAddress
-addressPart (IPAddress a,l) = IPAddress a
+addressPart (IPAddressPrefix (IPAddress a) l) = IPAddress a
 {-# INLINE addressPart #-}
           
 prefixLength :: IPAddressPrefix -> PrefixLength
-prefixLength (_,l) = l
+prefixLength (IPAddressPrefix _ l) = l
 {-# INLINE prefixLength #-}
 
 maxPrefixLen :: Word8
 maxPrefixLen = 32
 
 prefixIsExact :: IPAddressPrefix -> Bool
-prefixIsExact (_,l) = l==maxPrefixLen
+prefixIsExact (IPAddressPrefix _ l) = l==maxPrefixLen
 
 defaultIPPrefix = ipAddress 0 0 0 0 // 0
 
@@ -68,18 +79,12 @@ addressToOctets (IPAddress addr) = (b1,b2,b3,b4)
           b2 = fromIntegral $ shiftR (addr .&. (2^24 - 1)) 16
           b1 = fromIntegral $ shiftR (addr .&. (2^32 - 1)) 24
 
-showOctets :: IPAddress -> String
-showOctets addr = show b1 ++ "." ++ show b2 ++ "." ++ show b3 ++ "." ++ show b4
-    where (b1,b2,b3,b4) = addressToOctets addr
-
-showPrefix :: IPAddressPrefix -> String
-showPrefix (addr, len) = showOctets addr ++ "/" ++ show len
-
 prefixPlus :: IPAddressPrefix -> Word32 -> IPAddress
-prefixPlus (IPAddress addr,_) x = IPAddress (addr + x)
+prefixPlus (IPAddressPrefix (IPAddress addr) _) x = IPAddress (addr + x)
 
 prefixOverlaps :: IPAddressPrefix -> IPAddressPrefix -> Bool
-prefixOverlaps p1@(IPAddress addr, len) p2@(IPAddress addr', len') 
+prefixOverlaps p1@(IPAddressPrefix (IPAddress addr) len) 
+               p2@(IPAddressPrefix (IPAddress addr') len') 
     | addr .&. mask == addr' .&. mask = True
     | otherwise                       = False
     where len'' = min len len'
@@ -89,7 +94,7 @@ elemOfPrefix :: IPAddress -> IPAddressPrefix -> Bool
 elemOfPrefix addr prefix  = (addr // 32) `prefixOverlaps` prefix
 
 intersect :: IPAddressPrefix -> IPAddressPrefix -> Maybe IPAddressPrefix
-intersect p1@(_, len1) p2@(_, len2) 
+intersect p1@(IPAddressPrefix _ len1) p2@(IPAddressPrefix _ len2) 
     | p1 `prefixOverlaps` p2 = Just longerPrefix
     | otherwise              = Nothing
     where longerPrefix = if len1 < len2 then p2 else p1
@@ -105,7 +110,8 @@ disjoints :: [IPAddressPrefix] -> Bool
 disjoints = isNothing . intersects
 
 isSubset :: IPAddressPrefix -> IPAddressPrefix -> Bool
-isSubset p1@(_,l) p2@(_,l') = l <= l' && (p1 `prefixOverlaps` p2)
+isSubset p1@(IPAddressPrefix _ l) p2@(IPAddressPrefix _ l') = 
+  l <= l' && (p1 `prefixOverlaps` p2)
 
 parseIPAddress :: String -> Maybe IPAddress
 parseIPAddress s = case parse ipAddressParser "" s of 
