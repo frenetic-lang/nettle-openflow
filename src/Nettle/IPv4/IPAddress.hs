@@ -10,11 +10,17 @@ import Data.Maybe
 import Data.Binary.Strict.Get 
 import qualified Nettle.OpenFlow.StrictPut as Strict
 import qualified Data.Binary.Get as Binary
+import Text.Printf
 
-
-newtype IPAddress    = IPAddress Word32 deriving (Read, Eq, Show, Ord)
+newtype IPAddress    = IPAddress Word32 deriving (Read, Eq, Ord)
 type IPAddressPrefix = (IPAddress, PrefixLength)
 type PrefixLength    = Word8
+
+instance Show IPAddress where
+  show addr = printf "%03d.%03d.%03d.%03d" b3 b2 b1 b0
+    where (b3, b2, b1, b0) = addressToOctets addr
+
+
 
 ipAddressToWord32 :: IPAddress -> Word32
 ipAddressToWord32 (IPAddress a) = a
