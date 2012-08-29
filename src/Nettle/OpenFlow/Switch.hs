@@ -26,7 +26,7 @@ data SwitchFeatures
         capabilities :: [SwitchCapability], -- ^switch's capabilities
         supportedActions   :: [ActionType],       -- ^switch's supported actions
         ports        :: [Port]              -- ^description of each port on switch
-      } deriving (Show,Read,Eq)
+      } deriving (Show,Eq)
 
 -- |A unique identifier for a switch, also known as DataPathID.
 type SwitchID = Word64
@@ -45,21 +45,21 @@ data SwitchCapability = HasFlowStats                               -- ^can provi
                       | HasQueueStatistics                         -- ^can provide queue statistics
                       | CanMatchIPAddressesInARPPackets            -- ^match IP addresses in ARP packets
                       | CanReassembleIPFragments                   -- ^can reassemble IP fragments
-                        deriving (Show,Read,Eq,Ord,Enum)
+                        deriving (Show,Eq,Ord,Enum)
 
 
 data QueueConfigRequest = QueueConfigRequest PortID        
-                        deriving (Show,Read,Eq)
+                        deriving (Show,Eq)
 
 data QueueConfigReply = PortQueueConfig PortID [QueueConfig]
-                      deriving (Show,Read,Eq)
+                      deriving (Show,Eq)
                                
 data QueueConfig = QueueConfig QueueID [QueueProperty]
-                 deriving (Show,Read,Eq)
+                 deriving (Show,Eq)
 
 type QueueLength = Word16
 
 data QueueProperty = MinRateQueue QueueRate 
-                   deriving (Show,Read,Eq)
+                   deriving (Show,Eq)
 data QueueRate = Disabled | Enabled Word16
-               deriving (Show, Read, Eq)
+               deriving (Show, Eq)

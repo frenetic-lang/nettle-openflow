@@ -30,7 +30,7 @@ data Port
         portAdvertisedFeatures :: Maybe PortFeatures,    -- ^features advertised by port
         portSupportedFeatures  :: Maybe PortFeatures,    -- ^features supported by port
         portPeerFeatures       :: Maybe PortFeatures     -- ^features advertised by peer 
-      } deriving (Show,Read,Eq)
+      } deriving (Show,Eq)
 
 type PortID = Word16
 
@@ -38,7 +38,7 @@ data SpanningTreePortState = STPListening
                            | STPLearning 
                            | STPForwarding 
                            | STPBlocking 
-                             deriving (Show,Read,Eq,Ord,Enum)
+                             deriving (Show,Eq,Ord,Enum)
 
 -- | Possible behaviors of a physical port. Specification:
 --   @ofp_port_config@.
@@ -50,7 +50,7 @@ data PortConfigAttribute
     | NoFlooding     -- ^do not include this port when flooding
     | DropForwarded  -- ^drop packets forwarded to port
     | NoPacketInMsg  -- ^do not send packet-in messages for this port
-    deriving (Show,Read,Eq,Ord,Enum)
+    deriving (Show,Eq,Ord,Enum)
 
 -- | Possible port features. Specification @ofp_port_features@.
 data PortFeature
@@ -66,7 +66,7 @@ data PortFeature
     | AutoNegotiation
     | Pause
     | AsymmetricPause
-    deriving (Show,Read,Eq)
+    deriving (Show,Eq)
 
 -- | Set of 'PortFeature's. Specification: bitmap of members in @enum
 --   ofp_port_features@.
@@ -81,7 +81,7 @@ data PortMod
         attributesToSet   :: Map PortConfigAttribute Bool -- ^ attributes mapped to true will be set on, 
                                                           -- attributes mapped to false will be turned off, 
                                                           -- and attributes missing will be unchanged
-      } deriving (Show,Read,Eq)
+      } deriving (Show,Eq)
 
 -- | The @PortStatus@ represents information regarding
 -- a change to a port state on a switch.
@@ -92,7 +92,7 @@ type PortStatus  = (PortStatusUpdateReason, Port)
 data PortStatusUpdateReason = PortAdded 
                             | PortDeleted 
                             | PortModified 
-                              deriving (Show,Read,Eq,Ord,Enum)
+                              deriving (Show,Eq,Ord,Enum)
 
 portAttributeOn :: PortID -> EthernetAddress -> PortConfigAttribute -> PortMod
 portAttributeOn portID addr attr = PortModRecord portID addr (Map.singleton attr True)

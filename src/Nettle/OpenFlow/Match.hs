@@ -37,7 +37,7 @@ data Match = Match { inPort                             :: !(Maybe PortID),
                      matchIPProtocol                    :: !(Maybe IP.IPProtocol), 
                      srcIPAddress, dstIPAddress         :: !IPAddressPrefix,
                      srcTransportPort, dstTransportPort :: !(Maybe IP.TransportPort) }
-             deriving (Read,Eq)
+             deriving (Eq)
 
 instance Show Match where
   show = showMatch

@@ -1,6 +1,4 @@
-{-# LANGUAGE TypeOperators, MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE BangPatterns #-}
-
+{-# LANGUAGE TypeOperators #-}
 -- | This module provides data structures for Ethernet frames
 -- as well as parsers and unparsers for Ethernet frames. 
 module Nettle.Ethernet.EthernetFrame ( 
@@ -98,7 +96,7 @@ data EthernetHeader   = EthernetHeader { destMACAddress   :: !EthernetAddress,
                                          priorityCodePoint        :: !VLANPriority, 
                                          canonicalFormatIndicator :: !Bool, 
                                          vlanId                   :: !VLANID }
-                        deriving (Read,Show,Eq)
+                        deriving (Show,Eq)
 
 
 type VLANPriority     = Word8
