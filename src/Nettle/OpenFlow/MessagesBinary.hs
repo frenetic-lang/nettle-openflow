@@ -18,6 +18,9 @@ module Nettle.OpenFlow.MessagesBinary (
   , OFPHeader(..)
   ) where
 
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
 import Nettle.Ethernet.EthernetAddress
 import Nettle.Ethernet.EthernetFrame
 import Nettle.IPv4.IPAddress
@@ -36,9 +39,7 @@ import Control.Monad (when)
 import Control.Exception
 import Data.Word
 import Data.Bits
-import Nettle.OpenFlow.StrictPut
-import Data.Binary.Strict.Get
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as B
 import Data.Maybe (fromJust, isJust)
 import Data.List as List
 import Data.Char (chr)
@@ -165,7 +166,7 @@ putPacketInRecord pktInfo@(PacketInfo {..}) =
      putWord16be receivedOnPort
      putWord8    $ reason2Code reasonSent
      putWord8 0
-     putByteString packetData     
+     putLazyByteString packetData     
 
 
 {- Header -}
@@ -331,7 +332,7 @@ getSetConfig = do flags <- getWord16be
 getVendorMessage :: Get ()                  
 getVendorMessage 
   = do r <- remaining 
-       getByteString r
+       getByteString (fromIntegral r)
        return ()
                
 -------------------------------------------
@@ -363,7 +364,7 @@ getSwitchFeaturesRecord len = do
 putPhyPort :: Port -> Put
 putPhyPort (Port {..}) = 
   do putWord16be portID
-     putEthernetAddress portAddress
+     put portAddress
      mapM_ putWord8 $ take ofpMaxPortNameLen (map (fromIntegral . ord) portName ++ repeat 0)
      putWord32be $ portConfigsBitVector portConfig
      putWord32be $ portState2Code portLinkDown portSTPState
@@ -376,7 +377,7 @@ putPhyPort (Port {..}) =
 getPhyPort :: Get Port
 getPhyPort = do 
   port_no  <- getWord16be
-  hw_addr  <- getEthernetAddress
+  hw_addr  <- get
   name_arr <- getWord8s ofpMaxPortNameLen
   let port_name = [ chr (fromIntegral b) | b <- takeWhile (/=0) name_arr ]
   cfg  <- getWord32be
@@ -591,11 +592,11 @@ getPacketInRecord len = do
   in_port    <- getWord16be
   reasonCode <- getWord8
   skip 1
-  bytes <- getByteString (fromIntegral data_len)
+  bytes <- getLazyByteString (fromIntegral data_len)
   let reason = code2Reason reasonCode
   let mbufID = if (bufID == maxBound) then Nothing else Just bufID
-  let frame = {-# SCC "getPacketInRecord1" #-} fst (runGet getEthernetFrame bytes)
-  return $ PacketInfo mbufID (fromIntegral totalLen) in_port reason bytes frame
+  let frame = runGet get bytes
+  return $ PacketInfo mbufID (fromIntegral totalLen) in_port reason bytes (Right frame)
   where data_offset = 18 -- 8 + 4 + 2 + 2 + 1 + 1
         data_len    = len - data_offset
 
@@ -985,18 +986,18 @@ getActionForType StripVlanHeaderType _ =
   do skip 4
      return StripVlanHeader
 getActionForType SetEthSrcAddrType _ = 
-  do addr <- getEthernetAddress
+  do addr <- get
      skip 6
      return (SetEthSrcAddr addr)
 getActionForType SetEthDstAddrType _ = 
-  do addr <- getEthernetAddress
+  do addr <- get
      skip 6
      return (SetEthDstAddr addr)
 getActionForType SetIPSrcAddrType _ = 
-  do addr <- getIPAddress
+  do addr <- get
      return (SetIPSrcAddr addr)
 getActionForType SetIPDstAddrType _ = 
-  do addr <- getIPAddress
+  do addr <- get
      return (SetIPDstAddr addr)
 #if OPENFLOW_VERSION==152 || OPENFLOW_VERSION==1    
 getActionForType SetIPTypeOfServiceType _ = 
@@ -1125,7 +1126,7 @@ putSendPacket (PacketOutRecord {..}) = do
   {-# SCC "putSendPacket2" #-} putWord16be (maybe ofppNone id packetInPort)
   {-# SCC "putSendPacket3" #-} putWord16be (fromIntegral actionArraySize)
   {-# SCC "putSendPacket4" #-} mapM_ putAction packetActions
-  {-# SCC "putSendPacket5" #-} either (const $ return ()) putByteString bufferIDData
+  {-# SCC "putSendPacket5" #-} either (const $ return ()) putLazyByteString bufferIDData
     where actionArraySize = {-# SCC "putSendPacket6" #-} sum $ map actionSizeInBytes packetActions
 
 getPacketOut :: Int -> Get PacketOut
@@ -1137,7 +1138,7 @@ getPacketOut len = do
   x <- remaining
   packetData       <- if bufID' == -1
                       then let bytesOfData = len - headerSize - 4 - 2 - 2 - fromIntegral actionArraySize'
-                           in  getByteString (fromIntegral bytesOfData)
+                           in  getLazyByteString (fromIntegral bytesOfData)
                       else return B.empty
   return $ PacketOutRecord { bufferIDData = if bufID' == -1 
                                             then Right packetData
@@ -1516,12 +1517,12 @@ putAction act =
     (SetEthSrcAddr addr) -> 
         do putWord16be 4
            putWord16be 16
-           putEthernetAddress addr
+           put addr
            sequence_ (replicate 6 (putWord8 0))
     (SetEthDstAddr addr) -> 
         do putWord16be 5
            putWord16be 16
-           putEthernetAddress addr
+           put addr
            sequence_ (replicate 6 (putWord8 0))
     (SetIPSrcAddr addr) -> 
         do putWord16be 6
@@ -1617,7 +1618,7 @@ portModLength = 32
 putPortMod :: PortMod -> Put
 putPortMod (PortModRecord {..} ) = 
     do putWord16be portNumber
-       putEthernetAddress hwAddr
+       put hwAddr
        putConfigBitMap
        putMaskBitMap
        putAdvertiseBitMap
@@ -1763,8 +1764,8 @@ getMatch :: Get Match
 getMatch = do 
   wcards      <- getWord32be 
   inport      <- getWord16be
-  srcEthAddr  <- getEthernetAddress
-  dstEthAddr  <- getEthernetAddress
+  srcEthAddr  <- get
+  dstEthAddr  <- get
   dl_vlan     <- getWord16be
   dl_vlan_pcp <- getWord8
   skip 1
@@ -1782,8 +1783,8 @@ putMatch :: Match -> Put
 putMatch m = do 
   putWord32be $ ofpm_wildcards m'
   putWord16be $ ofpm_in_port m'
-  putEthernetAddress $ ofpm_dl_src m'
-  putEthernetAddress $ ofpm_dl_dst m'
+  put $ ofpm_dl_src m'
+  put $ ofpm_dl_dst m'
   putWord16be $ ofpm_dl_vlan m'
   putWord8 $ ofpm_dl_vlan_pcp m'
   putWord8 0  -- padding

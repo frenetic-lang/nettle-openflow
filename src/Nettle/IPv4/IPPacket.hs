@@ -62,9 +62,9 @@ import Data.Bits
 import Data.Word
 import qualified Data.ByteString.Lazy as B
 import Data.HList
-import Data.Binary.Strict.Get
-import Data.ByteString as S
-import qualified Data.Binary.Get as Binary
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
 
 -- | An IP packet consists of a header and a body.
 type IPPacket = IPHeader :*: IPBody :*: HNil
@@ -96,7 +96,7 @@ ipTypeIcmp = 1
 -- | The body of an IP packet can be either a TCP, UDP, ICMP or other packet. 
 -- Packets other than TCP, UDP, ICMP are represented as unparsed @ByteString@ values.
 data IPBody   = TCPInIP TCPHeader
-              | UDPInIP UDPHeader S.ByteString
+              | UDPInIP UDPHeader B.ByteString
               | ICMPInIP ICMPHeader
               | UninterpretedIPBody B.ByteString 
               deriving (Show,Eq)
@@ -117,7 +117,7 @@ fromTCPPacket (TCPInIP body) = Just (hCons body hNil)
 fromTCPPacket _ = Nothing
 
 
-fromUDPPacket :: IPBody -> Maybe (UDPHeader :*: S.ByteString :*: HNil)
+fromUDPPacket :: IPBody -> Maybe (UDPHeader :*: B.ByteString :*: HNil)
 fromUDPPacket (UDPInIP hdr body) = Just (hCons hdr (hCons body hNil))
 fromUDPPacket _ = Nothing
 
@@ -135,8 +135,8 @@ getIPHeader = do
   ttl                <- getWord8
   nwproto            <- getIPProtocol
   hdrChecksum        <- getWord16be
-  nwsrc              <- getIPAddress
-  nwdst              <- getIPAddress
+  nwsrc              <- get
+  nwdst              <- get
   return (IPHeader { ipSrcAddress = nwsrc 
                    , ipDstAddress = nwdst 
                    , ipProtocol = nwproto
@@ -151,25 +151,23 @@ getIPProtocol :: Get IPProtocol
 getIPProtocol = getWord8
 {-# INLINE getIPProtocol #-}
 
-getIPProtocol2 :: Binary.Get IPProtocol 
-getIPProtocol2 = Binary.getWord8
-
-
 getIPPacket :: Get IPPacket 
 getIPPacket = do 
   hdr  <- {-# SCC "getIPPacket1" #-} getIPHeader
   body <- {-# SCC "getIPPacket2" #-} getIPBody hdr
   return body
     where getIPBody hdr@(IPHeader {..}) 
-              | ipProtocol == ipTypeTcp  = {-# SCC "getIPPacket3" #-} getTCPHeader  >>= return . (\tcpHdr -> hCons hdr (hCons (TCPInIP tcpHdr) hNil))
-              | ipProtocol == ipTypeUdp  = {-# SCC "getIPPacket4" #-} 
-                                           do udpHdr <- getUDPHeader  
-                                              body <- getByteString (fromIntegral (totalLength - (4 * headerLength)) - 4)
-                                              return (hCons hdr (hCons (UDPInIP udpHdr body) hNil))
-              | ipProtocol == ipTypeIcmp = {-# SCC "getIPPacket5" #-} getICMPHeader >>= return . (\icmpHdr -> hCons hdr (hCons (ICMPInIP icmpHdr) hNil))
-              | otherwise                = {-# SCC "getIPPacket6" #-} 
-                                             getByteString (fromIntegral (totalLength - (4 * headerLength))) >>= 
-                                             return . (\bs -> hCons hdr (hCons (UninterpretedIPBody (B.fromChunks [bs])) hNil))
+              | ipProtocol == ipTypeTcp  = do
+                  tcpHdr <- getTCPHeader
+                  return (hCons hdr (hCons (TCPInIP tcpHdr) hNil))
+              | ipProtocol == ipTypeUdp  = do
+                  udpHdr <- getUDPHeader  
+                  body <- getLazyByteString (fromIntegral (totalLength - (4 * headerLength)) - 4)
+                  return (hCons hdr (hCons (UDPInIP udpHdr body) hNil))
+              | ipProtocol == ipTypeIcmp =  getICMPHeader >>= return . (\icmpHdr -> hCons hdr (hCons (ICMPInIP icmpHdr) hNil))
+              | otherwise                = do
+                  bs <- getLazyByteString (fromIntegral (totalLength - (4 * headerLength)))
+                  return (hCons hdr (hCons (UninterpretedIPBody bs) hNil))
 {-# INLINE getIPPacket #-}
           
 
@@ -187,11 +185,11 @@ getICMPHeader = do
   return (icmp_type, icmp_code)
 {-# INLINE getICMPHeader #-}  
 
-getICMPHeader2 :: Binary.Get ICMPHeader
+getICMPHeader2 :: Get ICMPHeader
 getICMPHeader2 = do 
-  icmp_type <- Binary.getWord8
-  icmp_code <- Binary.getWord8
-  Binary.skip 6
+  icmp_type <- getWord8
+  icmp_code <- getWord8
+  skip 6
   return (icmp_type, icmp_code)
 
 type TCPHeader  = (TCPPortNumber, TCPPortNumber)
@@ -204,12 +202,6 @@ getTCPHeader = do
   return (srcp,dstp)
 {-# INLINE getTCPHeader #-}  
 
-getTCPHeader2 :: Binary.Get TCPHeader
-getTCPHeader2 = do 
-  srcp <- Binary.getWord16be
-  dstp <- Binary.getWord16be
-  return (srcp,dstp)
-
 type UDPHeader     = (UDPPortNumber, UDPPortNumber)
 type UDPPortNumber = Word16
 
@@ -219,10 +211,4 @@ getUDPHeader = do
   dstp <- getWord16be
   return (srcp,dstp)
 {-# INLINE getUDPHeader #-}  
-
-getUDPHeader2 :: Binary.Get UDPHeader
-getUDPHeader2 = do 
-  srcp <- Binary.getWord16be
-  dstp <- Binary.getWord16be
-  return (srcp,dstp)
 

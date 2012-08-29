@@ -20,10 +20,7 @@ module Nettle.Servers.Server
       , handle2SwitchID
       , switchSockAddr
       , receiveFromSwitch
-      , receiveBatch
       , sendToSwitch
-      , sendBatch
-      , sendBatches
       , sendToSwitchWithID
       , closeSwitchHandle
         -- * Utility
@@ -33,15 +30,15 @@ module Nettle.Servers.Server
 
 import Control.Exception
 import Network.Socket hiding (recv)
-import Network.Socket.ByteString (recv, sendAll, sendMany)
-import qualified Data.ByteString as S
+import Network.Socket.ByteString.Lazy (recv, sendAll)
+import qualified Data.ByteString.Lazy as S
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
 import System.IO
-import Data.Binary.Strict.Get
 import Nettle.OpenFlow
-import qualified Nettle.OpenFlow.StrictPut as Strict
 import Data.Word
 import Foreign
-import qualified Data.ByteString.Internal as S
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.Printf
@@ -124,43 +121,6 @@ acceptSwitch ofps@(OpenFlowServer (s,shmr)) =
 -- | Returns the socket address of the switch connection. 
 switchSockAddr :: SwitchHandle -> SockAddr
 switchSockAddr (SwitchHandle (a,_,_,_,_,_)) = a
-
-receiveBatch :: SwitchHandle -> IO [(TransactionID, SCMessage)]
-receiveBatch sh@(SwitchHandle (_, s, _, inBufferRef,_,_)) = 
-  do newBatchBS <- recv s batchSize
-     inBuffer <- readIORef inBufferRef
-     let batchBS = S.append inBuffer newBatchBS
-     (chunks, remaining) <- splitChunks sh batchBS
-     writeIORef inBufferRef remaining
-     return chunks
-  where 
-    batchSize = 1 * 2^10
-{-# INLINE receiveBatch #-}
-
-splitChunks :: SwitchHandle -> S.ByteString -> IO ([(TransactionID, SCMessage)], S.ByteString)
-splitChunks sh buffer = go buffer []
-  where 
-    go buffer chunks =
-      if S.length buffer < headerSize
-      then return ({-# SCC "splitChunks1" #-} reverse chunks, buffer)
-      else 
-        let (result, buffer') = {-# SCC "splitChunks2" #-} runGet getHeader buffer
-        in case result of
-          Left err -> error err
-          Right header -> 
-            let expectedBodyLen = fromIntegral (msgLength header) - headerSize
-            in if expectedBodyLen <= S.length buffer'
-               then let (result', buffer'') = {-# SCC "splitChunks3" #-} runGet (getSCMessageBody header) buffer'
-                    in case result' of 
-                      Left err -> error err
-                      Right msg -> 
-                        case msg of 
-                          (xid, SCEchoRequest bytes) -> do sendToSwitch sh (xid, CSEchoReply bytes) 
-                                                           go buffer'' chunks
-                          _ -> go buffer'' (msg : chunks)
-               else return ({-# SCC "splitChunks4" #-} reverse chunks, buffer)
-      where headerSize = 8 
-            
             
 -- | Blocks until a message is received from the switch or the connection is closed.
 -- Returns `Nothing` only if the connection is closed.
@@ -172,18 +132,15 @@ receiveFromSwitch sh@(SwitchHandle (clientAddr, s, _, _, _, _))
               then return Nothing 
               else error "error reading header"
          else 
-           case fst (runGet getHeader hdrbs) of
-             Left err     -> error err
-             Right header -> 
+           let header = runGet getHeader hdrbs in
                do let expectedBodyLen = fromIntegral (msgLength header) - headerSize
                   bodybs <- if expectedBodyLen > 0 
                             then do bodybs <- recv s expectedBodyLen 
                                     when (expectedBodyLen /= S.length bodybs) (error "error reading body")
                                     return bodybs
                             else return S.empty
-                  case fst (runGet (getSCMessageBody header) bodybs ) of
-                    Left err  -> error err
-                    Right msg -> 
+                  case runGet (getSCMessageBody header) bodybs of
+                    msg -> 
                       case msg of 
                         (xid, SCEchoRequest bytes) -> do sendToSwitch sh (xid, CSEchoReply bytes)
                                                          receiveFromSwitch sh
@@ -194,31 +151,9 @@ receiveFromSwitch sh@(SwitchHandle (clientAddr, s, _, _, _, _))
 -- | Send a message to the switch.
 sendToSwitch :: SwitchHandle -> (TransactionID, CSMessage) -> IO ()       
 sendToSwitch (SwitchHandle (_,s,fptr,_,_, _)) msg =
-  do bytes <- withForeignPtr fptr $ \ptr -> Strict.runPut ptr (putCSMessage msg) 
-     let bs = S.fromForeignPtr fptr 0 bytes
-     sendAll s bs
+     sendAll s (runPut (putCSMessage msg))
 {-# INLINE sendToSwitch #-}    
-     
-sendBatch :: SwitchHandle -> Int -> [(TransactionID, CSMessage)] -> IO ()     
-sendBatch (SwitchHandle(_, s, _, _,_, _)) maxSize batch = 
-     sendMany s $ map (\msg -> Strict.runPutToByteString maxSize (putCSMessage msg)) batch
-{-# INLINE sendBatch #-}
-     
-sendBatches :: SwitchHandle -> Int -> [[(TransactionID, CSMessage)]] -> IO ()     
-sendBatches (SwitchHandle(_, s, fptr, _,_, _)) maxSize batches = 
-  do bytes <- withForeignPtr fptr $ \ptr -> {-# SCC "sendBatches1" #-} Strict.runPut ptr ({-# SCC "sendBatches1a" #-} mapM_ (mapM_ putCSMessage) batches)
-     let bs = S.fromForeignPtr fptr 0 bytes
-     {-# SCC "sendBatches2" #-} sendAll s bs
-{-# INLINE sendBatches #-}
-     
-  {- This is slower than the above.
-  mapM_ f batches
-  where f batch = do bytes <- withForeignPtr fptr $ \ptr -> Strict.runPut ptr (mapM_ putCSMessage batch)
-                     let bs = S.fromForeignPtr fptr 0 bytes
-                     sendAll s bs
-  -}  
-  
-     
+          
 sendToSwitchWithID :: OpenFlowServer -> SwitchID -> (TransactionID, CSMessage) -> IO ()                                             
 sendToSwitchWithID (OpenFlowServer (_,shmr)) sid msg 
   = do switchHandleMap <- readIORef shmr 

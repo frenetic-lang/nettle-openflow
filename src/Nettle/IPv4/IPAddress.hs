@@ -3,11 +3,10 @@ module Nettle.IPv4.IPAddress where
 import Data.Word
 import Data.Bits 
 import Data.Binary.Put
+import Data.Binary.Get
+import Data.Binary
 import Text.ParserCombinators.Parsec
 import Data.Maybe
-import Data.Binary.Strict.Get 
-import qualified Nettle.OpenFlow.StrictPut as Strict
-import qualified Data.Binary.Get as Binary
 import Text.Printf
 
 newtype IPAddress = IPAddress { ipAddressToWord32 :: Word32 }
@@ -39,12 +38,12 @@ ipAddress :: Word8 -> Word8 -> Word8 -> Word8 -> IPAddress
 ipAddress b1 b2 b3 b4 = 
     IPAddress $ foldl (\a b -> shift a 8 + fromIntegral b) (0 :: Word32) [b1,b2,b3,b4]
 
-getIPAddress :: Get IPAddress
-getIPAddress = getWord32be >>= return . IPAddress
-{-# INLINE getIPAddress #-}
-
-putIPAddress :: IPAddress -> Strict.Put
-putIPAddress (IPAddress a) = Strict.putWord32be a
+instance Binary IPAddress where
+  get = do
+    w <- getWord32be
+    return (IPAddress w)
+  put (IPAddress w) = do
+    putWord32be w
 
 (//) :: IPAddress -> PrefixLength -> IPAddressPrefix
 (IPAddress a) // len = a' `seq` IPAddressPrefix (IPAddress a') len

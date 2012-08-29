@@ -24,11 +24,8 @@ module Nettle.Ethernet.EthernetFrame (
   , foldEthernetBody
 
     -- * Parsers and unparsers 
-  , getEthernetFrame
   , getEthHeader
   , putEthHeader
-  , putEthFrame
-    
     -- * ARP frames    
   , arpQuery
   , arpReply
@@ -39,17 +36,15 @@ import Nettle.Ethernet.EthernetAddress
 import Nettle.IPv4.IPPacket
 import Nettle.IPv4.IPAddress
 import Nettle.Ethernet.AddressResolutionProtocol
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as B
 import Data.Binary
 import Data.Binary.Get
+import Data.Binary.Put
 import Data.Word
 import Data.Bits
 import Control.Monad
 import Control.Monad.Error
 import Data.HList
-import qualified Data.Binary.Strict.Get as Strict
-import qualified Nettle.OpenFlow.StrictPut as Strict
-import qualified Data.Binary.Get as Binary
 
 -- | An Ethernet frame is either an IP packet, an ARP packet, or an uninterpreted @ByteString@.
 -- Based on http://en.wikipedia.org/wiki/File:Ethernet_Type_II_Frame_format.svg
@@ -149,69 +144,65 @@ arpReply sha spa tha tpa = hCons hdr (hCons (ARPInEthernet ( body)) hNil)
 
 
 -- | Parser for Ethernet frames.
-getEthernetFrame :: Strict.Get EthernetFrame
-getEthernetFrame = do 
-  hdr <- {-# SCC "getEthHeader" #-} getEthHeader
-  -- r <- Strict.remaining
-  if typeCode hdr == ethTypeIP
-    then do ipPacket <- getIPPacket
-            return $ hCons hdr (hCons (IPInEthernet ipPacket) hNil)            
-    else if typeCode hdr == ethTypeARP
-         then do mArpPacket <- getARPPacket
-                 case mArpPacket of
-                   Just arpPacket -> return $ hCons hdr (hCons (ARPInEthernet arpPacket) hNil)
-                   Nothing ->
-                     do r <- Strict.remaining
-                        body <- Strict.getByteString r
-                        return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
-         else do r <- Strict.remaining
-                 body <- Strict.getByteString r
-                 return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
-{-# INLINE getEthernetFrame #-}
+instance Binary EthernetFrame where
+  get = do
+    hdr <- {-# SCC "getEthHeader" #-} getEthHeader
+    if typeCode hdr == ethTypeIP
+      then do ipPacket <- getIPPacket
+              return $ hCons hdr (hCons (IPInEthernet ipPacket) hNil)
+      else if typeCode hdr == ethTypeARP
+           then do mArpPacket <- getARPPacket
+                   case mArpPacket of
+                     Just arpPacket -> return $ hCons hdr (hCons (ARPInEthernet arpPacket) hNil)
+                     Nothing ->
+                       do r <- remaining
+                          body <- getByteString (fromIntegral r)
+                          return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
+           else do r <- remaining
+                   body <- getByteString (fromIntegral r)
+                   return $ hCons hdr (hCons (UninterpretedEthernetBody B.empty) hNil)  
+  put (HCons hdr (HCons body HNil)) =  do
+    putEthHeader hdr
+    case body of
+      IPInEthernet ipPacket -> error "put method not yet supported for IP packets"
+      ARPInEthernet arpPacket -> error "put method not yet supported for ARP packets"
+      UninterpretedEthernetBody bs -> putLazyByteString bs
 
-getEthHeader :: Strict.Get EthernetHeader
+
+
+getEthHeader :: Get EthernetHeader
 getEthHeader = do 
-  dstAddr <- getEthernetAddress
-  srcAddr <- getEthernetAddress
-  tcode   <- Strict.getWord16be
+  dstAddr <- get
+  srcAddr <- get
+  tcode   <- getWord16be
   if tcode >= typeEth2Cutoff 
     then if (tcode /= ethTypeVLAN) 
          then return (EthernetHeader dstAddr srcAddr tcode)
-         else do x <- Strict.getWord16be
-                 etherType <- Strict.getWord16be
+         else do x <- getWord16be
+                 etherType <- getWord16be
                  let pcp = fromIntegral (shiftR x 13)
                  let cfi = testBit x 12
                  let vid = clearBits x [12,13,14,15]
                  return (Ethernet8021Q dstAddr srcAddr etherType pcp cfi vid)
-    else Strict.zero
+    else fail "invalid ethernet type code"
 {-# INLINE getEthHeader #-}
 
 
 -- | Unparser for Ethernet headers.
-putEthHeader :: EthernetHeader -> Strict.Put 
+putEthHeader :: EthernetHeader -> Put 
 putEthHeader (EthernetHeader dstAddr srcAddr tcode) =  
-    do putEthernetAddress dstAddr
-       putEthernetAddress srcAddr
-       Strict.putWord16be tcode
+    do put dstAddr
+       put srcAddr
+       putWord16be tcode
 putEthHeader (Ethernet8021Q dstAddr srcAddr tcode pcp cfi vid) = 
-    do putEthernetAddress dstAddr
-       putEthernetAddress srcAddr
-       Strict.putWord16be ethTypeVLAN
-       Strict.putWord16be x
-       Strict.putWord16be tcode
+    do put dstAddr
+       put srcAddr
+       putWord16be ethTypeVLAN
+       putWord16be x
+       putWord16be tcode
     where x = let y = shiftL (fromIntegral pcp :: Word16) 13
                   y' = if cfi then setBit y 12 else y
               in y' + fromIntegral vid
-
-
-putEthFrame :: EthernetFrame -> Strict.Put
-putEthFrame (HCons hdr (HCons body HNil)) = 
-  do putEthHeader hdr
-     case body of
-       IPInEthernet ipPacket -> error "put method not yet supported for IP packets"
-       ARPInEthernet arpPacket -> error "put method not yet supported for ARP packets"
-       UninterpretedEthernetBody bs -> Strict.putByteString bs
-
 
 ethTypeIP, ethTypeARP, ethTypeLLDP, ethTypeVLAN, typeEth2Cutoff :: EthernetTypeCode
 ethTypeIP           = 0x0800

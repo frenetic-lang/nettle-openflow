@@ -12,13 +12,11 @@ import Nettle.Ethernet.EthernetAddress
 import Nettle.IPv4.IPAddress
 import Data.Binary
 import Data.Binary.Put
+import Data.Binary.Get
 import Data.Word
 import Control.Monad
 import Control.Monad.Error
 import Data.HList
-import qualified Data.Binary.Strict.Get as Strict
-import qualified Nettle.OpenFlow.StrictPut as Strict
-import qualified Data.Binary.Get as Binary
 
 data ARPPacket = ARPQuery ARPQueryPacket
                | ARPReply ARPReplyPacket
@@ -45,17 +43,17 @@ replyOpCode = 2
 
 
 -- | Parser for ARP packets
-getARPPacket :: Strict.Get (Maybe ARPPacket)
+getARPPacket :: Get (Maybe ARPPacket)
 getARPPacket = do 
-  htype <- Strict.getWord16be
-  ptype <- Strict.getWord16be
-  hlen  <- Strict.getWord8
-  plen  <- Strict.getWord8
-  opCode <- Strict.getWord16be
-  sha <- getEthernetAddress
-  spa <- getIPAddress
-  tha <- getEthernetAddress
-  tpa <- getIPAddress
+  htype <- getWord16be
+  ptype <- getWord16be
+  hlen  <- getWord8
+  plen  <- getWord8
+  opCode <- getWord16be
+  sha <- get
+  spa <- get
+  tha <- get
+  tpa <- get
   body <- if opCode == queryOpCode
           then return ( Just (ARPQuery (ARPQueryPacket { querySenderEthernetAddress = sha
                                                        , querySenderIPAddress       = spa
@@ -78,32 +76,32 @@ getARPPacket = do
 
 
 
-putARPPacket :: ARPPacket -> Strict.Put
+putARPPacket :: ARPPacket -> Put
 putARPPacket body = 
   case body of 
     (ARPQuery (ARPQueryPacket {..})) -> 
       do 
-        Strict.putWord16be ethernetHardwareType
-        Strict.putWord16be ipProtocolType
-        Strict.putWord8 numberOctetsInEthernetAddress
-        Strict.putWord8 numberOctetsInIPAddress
-        Strict.putWord16be queryOpCode
-        putEthernetAddress querySenderEthernetAddress
-        putIPAddress querySenderIPAddress
-        putEthernetAddress (ethernetAddress 0 0 0 0 0 0)
-        putIPAddress queryTargetIPAddress
+        putWord16be ethernetHardwareType
+        putWord16be ipProtocolType
+        putWord8 numberOctetsInEthernetAddress
+        putWord8 numberOctetsInIPAddress
+        putWord16be queryOpCode
+        put querySenderEthernetAddress
+        put querySenderIPAddress
+        put (ethernetAddress 0 0 0 0 0 0)
+        put queryTargetIPAddress
         
     (ARPReply (ARPReplyPacket {..})) -> 
       do 
-        Strict.putWord16be ethernetHardwareType
-        Strict.putWord16be ipProtocolType
-        Strict.putWord8 numberOctetsInEthernetAddress
-        Strict.putWord8 numberOctetsInIPAddress
-        Strict.putWord16be replyOpCode
-        putEthernetAddress replySenderEthernetAddress
-        putIPAddress replySenderIPAddress
-        putEthernetAddress replyTargetEthernetAddress
-        putIPAddress replyTargetIPAddress
+        putWord16be ethernetHardwareType
+        putWord16be ipProtocolType
+        putWord8 numberOctetsInEthernetAddress
+        putWord8 numberOctetsInIPAddress
+        putWord16be replyOpCode
+        put replySenderEthernetAddress
+        put replySenderIPAddress
+        put replyTargetEthernetAddress
+        put replyTargetIPAddress
 
 ethernetHardwareType          = 1
 ipProtocolType                = 0x0800

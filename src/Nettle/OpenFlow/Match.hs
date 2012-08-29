@@ -22,7 +22,9 @@ import Data.Maybe (isJust, catMaybes)
 import Control.Monad.Error
 import Data.HList 
 import Data.List (intersperse)
-import qualified Data.Binary.Strict.Get as Strict
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
 
 -- | Each flow entry includes a match, which essentially defines packet-matching condition. 
 -- Fields that are left Nothing are "wildcards".
@@ -179,9 +181,9 @@ addARPHeaders m (ARPReply (ARPReplyPacket {..})) =
 
 -- | Utility function to get an exact match corresponding to 
 -- a packet (as given by a byte sequence).
-getExactMatch :: PortID -> Strict.Get Match
+getExactMatch :: PortID -> Get Match
 getExactMatch inPort = do
-  frame <- getEthernetFrame
+  frame <- get
   return (frameToExactMatch inPort frame)
 
 

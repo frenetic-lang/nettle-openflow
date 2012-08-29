@@ -16,7 +16,7 @@ module Nettle.OpenFlow.Packet (
   , bufferedAtSwitch
   ) where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as B
 import Nettle.OpenFlow.Port
 import Nettle.OpenFlow.Action
 import Nettle.Ethernet.EthernetFrame

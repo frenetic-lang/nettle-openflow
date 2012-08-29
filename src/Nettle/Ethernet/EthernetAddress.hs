@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 module Nettle.Ethernet.EthernetAddress ( 
   -- * Ethernet address
@@ -7,16 +6,8 @@ module Nettle.Ethernet.EthernetAddress (
   , ethernetAddress
   , ethernetAddress64
   , unpack
-  , unpack64
-  , pack_32_16
   , isReserved
   , broadcastAddress
-    
-    -- * Parsers and unparsers
-  , getEthernetAddress
-  , getEthernetAddress2    
-  , putEthernetAddress
-  , putEthernetAddress2
   ) where
 
 import Data.Word
@@ -26,11 +17,8 @@ import Numeric (showHex)
 import Data.List (intersperse)
 import Data.Binary.Get
 import Data.Binary.Put
-import Data.Binary.Put as P
-import qualified Data.Binary.Strict.Get as Strict
-import qualified Nettle.OpenFlow.StrictPut as Strict
+import Data.Binary
 import Data.Generics
-import qualified Data.Binary.Get as Binary
 import GHC.Base
 import GHC.Word
 
@@ -60,14 +48,6 @@ ethernetAddress w1 w2 w3 w4 w5 w6
               (fromIntegral w6)
     in EthernetAddress w64
                                 
-pack_32_16 :: Word32 -> Word16 -> Word64
-pack_32_16 w32 w16 
-  = (fromIntegral w32 `shiftL` 16) .|. fromIntegral w16
-{-# INLINE pack_32_16 #-}
-
---  (W32# w32) (W16# w16) 
---  = W64# ((w32 `uncheckedShiftL#` 16#) `or#` w16)
-
 unpack :: EthernetAddress -> (Word8,Word8,Word8,Word8,Word8,Word8)
 unpack (EthernetAddress w64) = 
   let a1 = fromIntegral (shiftR w64 40)
@@ -78,41 +58,6 @@ unpack (EthernetAddress w64) =
       a6 = fromIntegral (w64 `mod` 0x0100)
   in (a1,a2,a3,a4,a5,a6)
 {-# INLINE unpack #-}
-
-unpack64 :: EthernetAddress -> Word64
-unpack64 (EthernetAddress e) = e
-{-# INLINE unpack64 #-}
-
--- | Parse an Ethernet address from a ByteString
-getEthernetAddress :: Strict.Get EthernetAddress                                
-getEthernetAddress = 
-  do w32 <- Strict.getWord32be  
-     w16 <- Strict.getWord16be
-     return (EthernetAddress (pack_32_16 w32 w16))
-{-# INLINE getEthernetAddress #-}     
-
-getEthernetAddress2 :: Binary.Get EthernetAddress                                
-getEthernetAddress2 = 
-  do w32 <- Binary.getWord32be  
-     w16 <- Binary.getWord16be
-     return (EthernetAddress (pack_32_16 w32 w16))
-
-
--- | Unparse an Ethernet address to a ByteString     
-putEthernetAddress :: EthernetAddress -> Strict.Put     
-putEthernetAddress (EthernetAddress w64) 
-  = Strict.putWord32be (fromIntegral (shiftR w64 16)) >>
-    Strict.putWord16be (fromIntegral (w64 `mod` 0x010000))
-{-# INLINE putEthernetAddress #-}    
-
-
--- | Unparse an Ethernet address to a ByteString     
-putEthernetAddress2 :: EthernetAddress -> P.Put     
-putEthernetAddress2 (EthernetAddress w64) -- a1 a2 a3 a4 a5 a6) = 
-  = P.putWord32be (fromIntegral (shiftR w64 16)) >>
-    P.putWord16be (fromIntegral (w64 `mod` 0x010000))
-{-# INLINE putEthernetAddress2 #-}    
-
 
 isReserved :: EthernetAddress -> Bool
 isReserved e = 
