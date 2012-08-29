@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-
 module Nettle.IPv4.IPAddress where
 
 import Data.Word
@@ -52,9 +50,9 @@ putIPAddress :: IPAddress -> Strict.Put
 putIPAddress (IPAddress a) = Strict.putWord32be a
 
 (//) :: IPAddress -> PrefixLength -> IPAddressPrefix
-(IPAddress a) // len = IPAddressPrefix (IPAddress a') len
-    where !a'   = a .&. mask
-          !mask = complement (2^(32 - fromIntegral len) - 1)
+(IPAddress a) // len = a' `seq` IPAddressPrefix (IPAddress a') len
+    where a'   = a .&. mask
+          mask = complement (2^(32 - fromIntegral len) - 1)
 
 addressPart :: IPAddressPrefix -> IPAddress
 addressPart (IPAddressPrefix (IPAddress a) l) = IPAddress a
