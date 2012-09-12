@@ -151,7 +151,7 @@ receiveFromSwitch sh@(SwitchHandle (clientAddr, s, _, _, _, _))
 -- | Send a message to the switch.
 sendToSwitch :: SwitchHandle -> (TransactionID, CSMessage) -> IO ()       
 sendToSwitch (SwitchHandle (_,s,fptr,_,_, _)) msg =
-     sendAll s (runPut (putCSMessage msg))
+     sendAll s (runPut (put (MessageToSwitch msg)))
 {-# INLINE sendToSwitch #-}    
           
 sendToSwitchWithID :: OpenFlowServer -> SwitchID -> (TransactionID, CSMessage) -> IO ()                                             

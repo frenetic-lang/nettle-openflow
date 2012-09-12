@@ -10,9 +10,8 @@ module Nettle.OpenFlow.MessagesBinary (
   , putSCMessage
   , getCSMessage
   , getCSMessageBody 
-  , putCSMessage
-    
   , OFPHeader(..)
+  , MessageToSwitch (..)
   ) where
 
 import Data.Binary
@@ -199,11 +198,57 @@ putHeader (OFPHeader {..}) = do putWord8 msgVersion
                                 putWord16be msgLength
                                 putWord32be msgTransactionID
 
-instance Binary (M.TransactionID, M.CSMessage) where
+data MessageToSwitch = MessageToSwitch (M.TransactionID, M.CSMessage)
+
+instance Binary MessageToSwitch where
   get = do
     hdr <- getHeader
-    getCSMessageBody hdr
-    
+    msg <- getCSMessageBody hdr
+    return (MessageToSwitch msg)
+  put (MessageToSwitch (xid, msg)) = case msg of 
+    M.FlowMod mod -> do 
+      let mod'@(FlowModRecordInternal {..}) = flowModToFlowModInternal mod 
+      putH xid ofptFlowMod (flowModSizeInBytes' actions')
+      putFlowMod mod'
+    M.PacketOut packetOut -> do
+      putH xid ofptPacketOut (sendPacketSizeInBytes packetOut)
+      putSendPacket packetOut
+    M.CSHello -> do
+      putH xid ofptHello headerSize
+    M.CSEchoRequest bytes -> do 
+      putH xid ofptEchoRequest (headerSize + length bytes) 
+      putWord8s bytes
+    M.CSEchoReply bytes -> do
+      putH xid ofptEchoReply (headerSize + length bytes)  
+      putWord8s bytes
+    M.FeaturesRequest -> do
+      putH xid ofptFeaturesRequest headerSize
+    M.PortMod portModRecord -> do
+      putH xid ofptPortMod portModLength
+      putPortMod portModRecord
+    M.BarrierRequest -> do 
+      putH xid ofptBarrierRequest headerSize
+    M.StatsRequest request -> do
+      putH xid ofptStatsRequest (statsRequestSize request)
+      putStatsRequest request
+    M.GetQueueConfig request -> do
+      putH xid ofptQueueGetConfigRequest 12
+      putQueueConfigRequest request
+    M.ExtQueueModify p qCfgs -> do
+      putH xid ofptVendor (headerSize + 16 + sum (map lenQueueConfig qCfgs))
+      putWord32be 0x000026e1 -- OPENFLOW_VENDOR_ID
+      putWord32be 0 -- OFP_EXT_QUEUE_MODIFY
+      putWord16be p
+      putWord32be 0 >> putWord16be 0
+      mapM_ put qCfgs
+    M.ExtQueueDelete p qCfgs -> do
+      putH xid ofptVendor (headerSize + 16 + sum(map lenQueueConfig qCfgs))
+      putWord32be 0x000026e1 -- OPENFLOW_VENDOR_ID
+      putWord32be 1 -- OFP_EXT_QUEUE_DELETE
+      putWord16be p
+      putWord32be 0 >> putWord16be 0
+      mapM_ put qCfgs
+      
                    
 -- | Parser for the OpenFlow message header                          
 getHeader :: Get OFPHeader
@@ -1079,34 +1124,33 @@ getPortStatsReply = do port_no    <- getWord16be
 ----------------------------------------------
 -- Unparsers for CSMessages
 ----------------------------------------------          
+putH :: Integral a => M.TransactionID -> MessageTypeCode -> a -> Put
+putH xid tcode len = putHeader (OFPHeader ofpVersion tcode (fromIntegral len) xid) 
 
--- | Unparser for @CSMessage@s
-putCSMessage :: (M.TransactionID, M.CSMessage) -> Put
-putCSMessage (xid, msg) = 
-    case msg of 
-          M.FlowMod mod -> do let mod'@(FlowModRecordInternal {..}) = flowModToFlowModInternal mod 
-                              putH ofptFlowMod (flowModSizeInBytes' actions')
-                              putFlowMod mod'
-          M.PacketOut packetOut -> {-# SCC "putCSMessage1" #-}
-                                   do putH ofptPacketOut (sendPacketSizeInBytes packetOut)
-                                      putSendPacket packetOut
-          M.CSHello -> putH ofptHello headerSize
-          M.CSEchoRequest bytes -> do putH ofptEchoRequest (headerSize + length bytes) 
-                                      putWord8s bytes
-          M.CSEchoReply  bytes   -> do putH ofptEchoReply (headerSize + length bytes)  
-                                       putWord8s bytes
-          M.FeaturesRequest -> putH ofptFeaturesRequest headerSize
-          M.PortMod portModRecord -> do putH ofptPortMod portModLength
-                                        putPortMod portModRecord
-          M.BarrierRequest         -> do putH ofptBarrierRequest headerSize
-          M.StatsRequest request -> do putH ofptStatsRequest (statsRequestSize request)
-                                       putStatsRequest request
-          M.GetQueueConfig request -> do putH ofptQueueGetConfigRequest 12
-                                         putQueueConfigRequest request
-    where vid      = ofpVersion
-          putH :: Integral a => MessageTypeCode -> a -> Put
-          putH tcode len = putHeader (OFPHeader vid tcode (fromIntegral len) xid) 
-{-# INLINE putCSMessage #-}
+lenQueueConfig (QueueConfig _ props) = 8 + sum (map lenQueueProp props)
+
+lenQueueProp (MinRateQueue _) = 16
+
+-- struct ofp_packet_queue
+instance Binary QueueConfig where
+  put (QueueConfig qid props) = do
+    putWord32be qid
+    putWord16be (8 + sum (map lenQueueProp props))
+    putWord16be 0 -- padding
+    mapM_ put props
+  get = error "Binary.get for QueueConfig not implemented"
+
+instance Binary QueueProperty where
+  put (MinRateQueue (Enabled rate)) = do
+    putWord16be 1 -- OFPQT_MIN_RATE
+    putWord16be 16 -- length
+    putWord32be 0 -- padding
+    putWord16be rate
+    putWord32be 0 -- padding
+    putWord16be 0 --padding
+  get = error "Binary.get for QueueProperty not implemented"
+
+
 
 putQueueConfigRequest :: QueueConfigRequest -> Put
 putQueueConfigRequest (QueueConfigRequest portID) = 

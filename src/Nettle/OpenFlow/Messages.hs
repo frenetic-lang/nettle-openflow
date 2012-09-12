@@ -53,6 +53,8 @@ data CSMessage
     | SetConfig
     | Vendor
     | GetQueueConfig !QueueConfigRequest
+    | ExtQueueModify !Port.PortID ![QueueConfig]
+    | ExtQueueDelete !Port.PortID ![QueueConfig]
       deriving (Show,Eq)
 
 
