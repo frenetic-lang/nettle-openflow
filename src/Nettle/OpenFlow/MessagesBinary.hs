@@ -1,11 +1,8 @@
-{-# LANGUAGE CPP, DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE BangPatterns #-}
-
+{-# LANGUAGE CPP #-}
 -- | This module implements parsing and unparsing functions for 
 -- OpenFlow messages. It exports a driver that can be used to read messages
 -- from a file handle and write messages to a handle.
 module Nettle.OpenFlow.MessagesBinary (
---  messageDriver2
     -- * Parsing and unparsing methods
   getHeader
   , getSCMessage  
@@ -201,6 +198,12 @@ putHeader (OFPHeader {..}) = do putWord8 msgVersion
                                 putWord8 msgType 
                                 putWord16be msgLength
                                 putWord32be msgTransactionID
+
+instance Binary (M.TransactionID, M.CSMessage) where
+  get = do
+    hdr <- getHeader
+    getCSMessageBody hdr
+    
                    
 -- | Parser for the OpenFlow message header                          
 getHeader :: Get OFPHeader
@@ -520,7 +523,7 @@ code2ActionType code =
 -}
 
 code2ActionType :: Word16 -> ActionType
-code2ActionType !code = 
+code2ActionType code = 
   case code of
     0 -> OutputToPortType
     1 -> SetVlanVIDType
@@ -602,7 +605,7 @@ getPacketInRecord len = do
 
 {-# INLINE code2Reason #-}
 code2Reason :: Word8 -> PacketInReason
-code2Reason !code 
+code2Reason code 
   | code == 0  = NotMatched
   | code == 1  = ExplicitSend
   | otherwise  = error ("Received unknown packet-in reason code: " ++ show code ++ ".")
@@ -966,7 +969,7 @@ getActionForType OutputToPortType _ =
   do port    <- getWord16be 
      max_len <- getWord16be
      return (SendOutPort (action port max_len))
-    where action !port !max_len
+    where action port max_len
               | port <= 0xff00          = PhysicalPort port
               | port == ofppInPort      = InPort
               | port == ofppFlood       = Flood
@@ -1590,7 +1593,7 @@ actionSizeInBytes (VendorAction _ bytes) = let l = 2 + 2 + 4 + length bytes
 {-# INLINE actionSizeInBytes #-}
 
 typeOfAction :: Action -> ActionType
-typeOfAction !a =
+typeOfAction a =
     case a of
       SendOutPort _         -> OutputToPortType
       SetVlanVID _          -> SetVlanVIDType
