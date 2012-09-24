@@ -41,7 +41,6 @@ data SwitchCapability = HasFlowStats                               -- ^can provi
                       | HasTableStats                              -- ^can provide table statistics
                       | HasPortStats                               -- ^can provide port statistics
                       | SpanningTree                               -- ^supports the 802.1d spanning tree protocol
-                      | MayTransmitOverMultiplePhysicalInterfaces
                       | HasQueueStatistics                         -- ^can provide queue statistics
                       | CanMatchIPAddressesInARPPackets            -- ^match IP addresses in ARP packets
                       | CanReassembleIPFragments                   -- ^can reassemble IP fragments

@@ -541,15 +541,9 @@ switchCapability2BitMask HasFlowStats  = shiftL 1 0
 switchCapability2BitMask HasTableStats = shiftL 1 1
 switchCapability2BitMask HasPortStats  = shiftL 1 2
 switchCapability2BitMask SpanningTree  = shiftL 1 3
-#if OPENFLOW_VERSION==151 || OPENFLOW_VERSION==152
-switchCapability2BitMask MayTransmitOverMultiplePhysicalInterfaces = shiftL 1 4
-#endif
 switchCapability2BitMask CanReassembleIPFragments = shiftL 1 5
-#if OPENFLOW_VERSION==1
 switchCapability2BitMask HasQueueStatistics = shiftL 1 6
 switchCapability2BitMask CanMatchIPAddressesInARPPackets = shiftL 1 7
-#endif
-
 
 bitMap2SwitchActionSet :: Word32 -> [ActionType]
 bitMap2SwitchActionSet bmap = filter inBMap $ enumFrom $ toEnum 0
@@ -1684,6 +1678,8 @@ putPortMod (PortModRecord {..} ) =
 ----------------------------------------
           
 statsRequestSize :: StatsRequest -> Int
+statsRequestSize (AggregateFlowStatsRequest _ _ _) = 
+  headerSize + 2 + 2 + matchSize + 1 + 1 + 2
 statsRequestSize (FlowStatsRequest _ _ _) = headerSize + 2 + 2 + matchSize + 1 + 1 + 2
 #if OPENFLOW_VERSION==151 || OPENFLOW_VERSION==152 
 statsRequestSize (PortStatsRequest)       = headerSize + 2 + 2 
