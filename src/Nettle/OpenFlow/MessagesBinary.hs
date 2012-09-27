@@ -7,7 +7,6 @@ module Nettle.OpenFlow.MessagesBinary (
   getHeader
   , getSCMessage  
   , getSCMessageBody
-  , putSCMessage
   , getCSMessage
   , getCSMessageBody 
   , OFPHeader(..)
@@ -118,7 +117,6 @@ ofptQueueGetConfigRequest = 20
 ofptQueueGetConfigReply :: MessageTypeCode
 ofptQueueGetConfigReply   = 21
 
-
 -- | Parser for @SCMessage@s
 getSCMessage :: Get (M.TransactionID, M.SCMessage) 
 getSCMessage = do hdr <- getHeader
@@ -129,28 +127,6 @@ getSCMessage = do hdr <- getHeader
 getCSMessage :: Get (M.TransactionID, M.CSMessage)
 getCSMessage = do hdr <- getHeader
                   getCSMessageBody hdr
-
-
--- | Unparser for @SCMessage@s
-putSCMessage :: (M.TransactionID, M.SCMessage) -> Put 
-putSCMessage (xid, msg) = 
-  case msg of 
-    M.SCHello -> putH ofptHello headerSize
-
-    M.SCEchoRequest bytes -> do putH ofptEchoRequest (headerSize + length bytes) 
-                                putWord8s bytes
-
-    M.SCEchoReply  bytes  -> do putH ofptEchoReply (headerSize + length bytes)  
-                                putWord8s bytes
-    M.PacketIn pktInfo    -> do let bodyLen = packetInMessageBodyLen pktInfo
-                                putH ofptPacketIn (headerSize + bodyLen)
-                                putPacketInRecord pktInfo
-    M.Features features   -> do putH ofptFeaturesReply (headerSize + 24 + 48 * length (ports features))
-                                putSwitchFeaturesRecord features
-    M.Error error         -> do putH ofptError (headerSize + 2 + 2)
-                                putSwitchError error 
-  where vid      = ofpVersion
-        putH tcode len = putHeader (OFPHeader vid tcode (fromIntegral len) xid) 
 
 packetInMessageBodyLen :: PacketInfo -> Int
 packetInMessageBodyLen pktInfo = 10 + fromIntegral (packetLength pktInfo)
@@ -228,6 +204,10 @@ instance Binary MessageToSwitch where
       putPortMod portModRecord
     M.BarrierRequest -> do 
       putH xid ofptBarrierRequest headerSize
+    M.SetConfig -> do 
+      putH xid ofptSetConfig headerSize
+    M.Vendor -> do 
+      putH xid ofptVendor headerSize
     M.StatsRequest request -> do
       putH xid ofptStatsRequest (statsRequestSize request)
       putStatsRequest request
@@ -248,7 +228,7 @@ instance Binary MessageToSwitch where
       putWord16be p
       putWord32be 0 >> putWord16be 0
       mapM_ put qCfgs
-      
+
                    
 -- | Parser for the OpenFlow message header                          
 getHeader :: Get OFPHeader
@@ -577,6 +557,7 @@ code2ActionType code =
     10 -> SetTransportDstPortType
     11 -> EnqueueType
     0xffff -> VendorActionType 
+    _ -> error ("In code2ActionType: encountered unknown action type code: " ++ show code)
 {-# INLINE code2ActionType #-}
 
 actionType2Code :: ActionType -> Word16
@@ -688,11 +669,6 @@ getSwitchError len = do
   bytes <- getWord8s (len - headerSize - 4)
   return (code2ErrorType typ code bytes)
 
-putSwitchError :: SwitchError -> Put
-putSwitchError (BadRequest VendorNotSupported []) = 
-  do putWord16be 1
-     putWord16be 3
-
 code2ErrorType :: Word16 -> Word16 -> [Word8] -> SwitchError
 #if OPENFLOW_VERSION==151
 code2ErrorType typ code bytes
@@ -700,6 +676,7 @@ code2ErrorType typ code bytes
     | typ == 1 = BadRequest    (requestErrorCodeMap ! code) bytes
     | typ == 2 = BadAction     code bytes
     | typ == 3 = FlowModFailed code bytes
+    | otherwise = error ("In code2ErrorType: Unkown type: " ++ show typ)
 #endif
 #if OPENFLOW_VERSION==152
 code2ErrorType typ code bytes
@@ -707,6 +684,7 @@ code2ErrorType typ code bytes
     | typ == 1  = BadRequest    (requestErrorCodeMap ! code) bytes
     | typ == 2  = BadAction     (actionErrorCodeMap  ! code) bytes
     | typ == 3  = FlowModFailed (flowModErrorCodeMap ! code) bytes
+    | otherwise = error ("In code2ErrorType: Unkown type: " ++ show typ)
 #endif
 #if OPENFLOW_VERSION==1    
 code2ErrorType typ code bytes
@@ -716,8 +694,8 @@ code2ErrorType typ code bytes
     | typ == 3 = FlowModFailed (flowModErrorCodeMap ! code) bytes
     | typ == 4 = error "Port mod failed error not yet handled"
     | typ == 5 = error "Queue op failed error not yet handled"                 
+    | otherwise = error ("In code2ErrorType: Unkown type: " ++ show typ)
 #endif
-
 
 helloErrorCodesMap = Bimap.fromList [ (0, IncompatibleVersions)
 #if OPENFLOW_VERSION==152 || OPENFLOW_VERSION==1
@@ -1015,6 +993,7 @@ getActionForType OutputToPortType _ =
               | port == ofppAll         = AllPhysicalPorts
               | port == ofppController  = ToController max_len
               | port == ofppTable       = WithTable
+              | otherwise               = error ("In getActionForType: unknown port: " ++ show port)
           {-# INLINE action #-}
 getActionForType SetVlanVIDType _ = 
   do vlanid <- getWord16be
@@ -1142,9 +1121,14 @@ instance Binary QueueProperty where
     putWord16be rate
     putWord32be 0 -- padding
     putWord16be 0 --padding
+  put (MinRateQueue Disabled) = do   
+    putWord16be 1 -- OFPQT_MIN_RATE
+    putWord16be 16 -- length
+    putWord32be 0 -- padding
+    putWord16be 1000
+    putWord32be 0 -- padding
+    putWord16be 0 --padding    
   get = error "Binary.get for QueueProperty not implemented"
-
-
 
 putQueueConfigRequest :: QueueConfigRequest -> Put
 putQueueConfigRequest (QueueConfigRequest portID) = 
@@ -1194,7 +1178,7 @@ getActionsOfSize n
                as <- getActionsOfSize (n - actionSizeInBytes a)
                return (a : as)
   | n == 0 = return []
-  | n < 0  = error "bad number of actions or bad action size"
+  | otherwise  = error "bad number of actions or bad action size"
 {-# INLINE getActionsOfSize #-}
 
 ------------------------------------------
@@ -1682,12 +1666,14 @@ statsRequestSize (AggregateFlowStatsRequest _ _ _) =
   headerSize + 2 + 2 + matchSize + 1 + 1 + 2
 statsRequestSize (FlowStatsRequest _ _ _) = headerSize + 2 + 2 + matchSize + 1 + 1 + 2
 #if OPENFLOW_VERSION==151 || OPENFLOW_VERSION==152 
-statsRequestSize (PortStatsRequest)       = headerSize + 2 + 2 
+statsRequestSize (PortStatsRequest) = headerSize + 2 + 2 
 #endif
 #if OPENFLOW_VERSION==1
-statsRequestSize (PortStatsRequest _)     = headerSize + 2 + 2 + 2 + 6
+statsRequestSize (PortStatsRequest _) = headerSize + 2 + 2 + 2 + 6
 #endif
-
+statsRequestSize (TableStatsRequest) = headerSize + 2 + 2 
+statsRequestSize (DescriptionRequest) = headerSize + 2 + 2 + 256 + 256 + 32 + 256
+statsRequestSize (QueueStatsRequest portQuery queueQuery) = headerSize + 2 + 2 + 2 + 2 + 4
 
 putStatsRequest :: StatsRequest -> Put 
 putStatsRequest (FlowStatsRequest match tableQuery mPort) = 
@@ -1766,7 +1752,7 @@ code2FakePort w
   | w == ofppController = ToController 0
   | w == ofppNormal     = NormalSwitching
   | w == ofppTable      = WithTable
-  | otherwise           = error ("unknown pseudo port number: " ++ show w)
+  | otherwise           = error ("In code2FakePort: Unknown pseudo port number: " ++ show w)
 
 tableQueryToCode :: TableQuery -> Word8
 tableQueryToCode AllTables      = 0xff
