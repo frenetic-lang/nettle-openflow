@@ -14,10 +14,12 @@ import Data.Binary.Get
 import Data.Binary.Put
 import Numeric (showHex)
 import Data.List (intersperse)
+import Data.Generics
 
 -- | An Ethernet address consists of six bytes. These six bytes are stored in
 -- the lower-order bits of a 64-bit value.
 newtype EthernetAddress = EthernetAddress { unpackEth64 :: Word64 }
+  deriving (Data, Typeable)
 
 instance Eq EthernetAddress where
   (EthernetAddress w1) == (EthernetAddress w2) =

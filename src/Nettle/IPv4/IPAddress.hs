@@ -8,15 +8,16 @@ import Data.Binary
 import Text.ParserCombinators.Parsec
 import Data.Maybe
 import Text.Printf
+import Data.Generics
 
 newtype IPAddress = IPAddress { ipAddressToWord32 :: Word32 }
-  deriving (Read, Eq, Ord)
+  deriving (Read, Eq, Ord, Data, Typeable)
 
 type PrefixLength    = Word8
 
 data IPAddressPrefix 
   = IPAddressPrefix IPAddress PrefixLength
-  deriving (Eq, Ord, Read)
+  deriving (Eq, Ord, Read, Data, Typeable)
                      
 
 instance Show IPAddress where

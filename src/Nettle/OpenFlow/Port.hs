@@ -15,6 +15,7 @@ module Nettle.OpenFlow.Port (
 import Data.Word
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Generics
 import Nettle.Ethernet.EthernetAddress
 
 -- ^ A switch receives and sends packets on a port; The Port data type models attributes of a physical port.
@@ -30,7 +31,7 @@ data Port
         portAdvertisedFeatures :: Maybe PortFeatures,    -- ^features advertised by port
         portSupportedFeatures  :: Maybe PortFeatures,    -- ^features supported by port
         portPeerFeatures       :: Maybe PortFeatures     -- ^features advertised by peer 
-      } deriving (Show,Eq)
+      } deriving (Show,Eq,Data,Typeable)
 
 type PortID = Word16
 
@@ -38,7 +39,7 @@ data SpanningTreePortState = STPListening
                            | STPLearning 
                            | STPForwarding 
                            | STPBlocking 
-                             deriving (Show,Eq,Ord,Enum)
+                             deriving (Show,Eq,Ord,Enum,Data,Typeable)
 
 -- | Possible behaviors of a physical port. Specification:
 --   @ofp_port_config@.
@@ -50,7 +51,7 @@ data PortConfigAttribute
     | NoFlooding     -- ^do not include this port when flooding
     | DropForwarded  -- ^drop packets forwarded to port
     | NoPacketInMsg  -- ^do not send packet-in messages for this port
-    deriving (Show,Eq,Ord,Enum)
+    deriving (Show,Eq,Ord,Enum,Data,Typeable)
 
 -- | Possible port features. Specification @ofp_port_features@.
 data PortFeature
@@ -66,7 +67,7 @@ data PortFeature
     | AutoNegotiation
     | Pause
     | AsymmetricPause
-    deriving (Show,Eq)
+    deriving (Show,Eq,Data,Typeable)
 
 -- | Set of 'PortFeature's. Specification: bitmap of members in @enum
 --   ofp_port_features@.
@@ -92,7 +93,7 @@ type PortStatus  = (PortStatusUpdateReason, Port)
 data PortStatusUpdateReason = PortAdded 
                             | PortDeleted 
                             | PortModified 
-                              deriving (Show,Eq,Ord,Enum)
+                              deriving (Show,Eq,Ord,Enum,Data,Typeable)
 
 portAttributeOn :: PortID -> EthernetAddress -> PortConfigAttribute -> PortMod
 portAttributeOn portID addr attr = PortModRecord portID addr (Map.singleton attr True)

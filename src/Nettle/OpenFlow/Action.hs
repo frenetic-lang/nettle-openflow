@@ -27,6 +27,7 @@ import Nettle.Ethernet.EthernetFrame
 import Nettle.IPv4.IPAddress
 import Nettle.IPv4.IPPacket
 import Data.Word
+import Data.Generics
 
 
 -- |The supported switch actions are denoted with these symbols.
@@ -43,7 +44,7 @@ data ActionType = OutputToPortType
                 | SetTransportDstPortType
                 | EnqueueType            
                 | VendorActionType
-                  deriving (Show,Read,Eq,Ord,Enum)
+                  deriving (Show,Read,Eq,Ord,Enum,Data,Typeable)
 
 -- | Each flow table entry contains a list of actions that will
 -- be executed when a packet matches the entry. 

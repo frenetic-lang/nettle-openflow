@@ -14,6 +14,7 @@ module Nettle.OpenFlow.Switch (
   ) where
 
 import Data.Word
+import Data.Generics
 import Nettle.OpenFlow.Port
 import Nettle.OpenFlow.Action
 
@@ -26,7 +27,7 @@ data SwitchFeatures
         capabilities :: [SwitchCapability], -- ^switch's capabilities
         supportedActions   :: [ActionType],       -- ^switch's supported actions
         ports        :: [Port]              -- ^description of each port on switch
-      } deriving (Show,Eq)
+      } deriving (Show,Eq,Data,Typeable)
 
 -- |A unique identifier for a switch, also known as DataPathID.
 type SwitchID = Word64
@@ -44,7 +45,7 @@ data SwitchCapability = HasFlowStats                               -- ^can provi
                       | HasQueueStatistics                         -- ^can provide queue statistics
                       | CanMatchIPAddressesInARPPackets            -- ^match IP addresses in ARP packets
                       | CanReassembleIPFragments                   -- ^can reassemble IP fragments
-                        deriving (Show,Eq,Ord,Enum)
+                        deriving (Show,Eq,Ord,Enum,Data,Typeable)
 
 
 data QueueConfigRequest = QueueConfigRequest PortID        
