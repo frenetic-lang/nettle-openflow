@@ -45,7 +45,6 @@ import Text.Printf
 import System.Log.Logger
 
 type ServerPortNumber = Word16
-deriving instance Ord SockAddr
 
 -- | Abstract type containing the state of the OpenFlow server.
 newtype OpenFlowServer = OpenFlowServer (Socket, IORef (Map SwitchID SwitchHandle))
